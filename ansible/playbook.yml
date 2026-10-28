@@ -1,55 +1,52 @@
 ---
-- name: Setup Nginx and MySQL Server
+- name: Setup Nginx Web Server on Ubuntu
   hosts: all
-  become: yes
-  vars:
-    db_name: "app_db"
-    db_user: "app_user"
-    db_password: "AppPassword@123"
+  become: true
+  gather_facts: false
 
   tasks:
+    # 1. Wait karo jab tak EC2 server ka SSH start na ho jaye
+    - name: Wait for SSH to be ready
+      ansible.builtin.wait_for_connection:
+        delay: 5
+        timeout: 180
+
+    # 2. System info gather karo
+    - name: Gather facts
+      ansible.builtin.gather_facts:
+
+    # 3. apt update chalao
     - name: Update apt cache
-      apt:
-        update_cache: yes
+      ansible.builtin.apt:
+        update_cache: true
         cache_valid_time: 3600
 
-    - name: Install Nginx, MySQL Server, and Python dependencies
-      apt:
-        name:
-          - nginx
-          - mysql-server
-          - python3-pymysql
+    # 4. Nginx install karo
+    - name: Install Nginx
+      ansible.builtin.apt:
+        name: nginx
         state: present
 
-    - name: Start and enable Nginx
-      service:
+    # 5. Nginx ko start karo aur boot pe enable karo
+    - name: Ensure Nginx is running
+      ansible.builtin.service:
         name: nginx
         state: started
-        enabled: yes
+        enabled: true
 
-    - name: Start and enable MySQL
-      service:
-        name: mysql
-        state: started
-        enabled: yes
-
-    - name: Create MySQL database
-      mysql_db:
-        name: "{{ db_name }}"
-        state: present
-        login_unix_socket: /var/run/mysqld/mysqld.sock
-
-    - name: Create MySQL user with privileges
-      mysql_user:
-        name: "{{ db_user }}"
-        password: "{{ db_password }}"
-        priv: "{{ db_name }}.*:ALL"
-        host: "localhost"
-        state: present
-        login_unix_socket: /var/run/mysqld/mysqld.sock
-
+    # 6. index.html file ko /var/www/html/ par copy karo
     - name: Deploy custom index.html
-      copy:
+      ansible.builtin.copy:
         src: index.html
         dest: /var/www/html/index.html
+        owner: www-data
+        group: www-data
         mode: '0644'
+      notify: Reload Nginx
+
+  handlers:
+    - name: Reload Nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
+

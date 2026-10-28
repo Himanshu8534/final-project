@@ -1,6 +1,9 @@
-name: End-to-End One-Click Deployment
+name: CI/CD Infrastructure & Nginx Deploy
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -8,43 +11,61 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Code download karo
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
+      # Step 2: AWS credentials connect karo
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
+          aws-region: 'us-east-1'
 
+      # Step 3: Terraform install karo
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
+        uses: hashicorp/setup-terraform@v3
         with:
-          terraform_wrapper: false
+          terraform_version: 1.8.0
 
-      - name: Terraform Init & Apply
+      # Step 4: Python aur Ansible install karo
+      - name: Install Ansible
         run: |
-          cd terraform
-          terraform init
-          terraform apply -auto-approve
-          SERVER_IP=$(terraform output -raw server_public_ip)
-          echo "EC2_IP=$SERVER_IP" >> $GITHUB_ENV
+          pip install ansible
 
-      - name: Setup SSH Key
+      # Step 5: SSH Key create karo (Ansible ke connect hone ke liye)
+      - name: Generate SSH Key
+        id: ssh
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ""
+          echo "pub_key=$(cat ~/.ssh/id_rsa.pub)" >> $GITHUB_OUTPUT
           chmod 600 ~/.ssh/id_rsa
 
-      - name: Wait for EC2 SSH availability
+      # Step 6: Terraform Init & Apply
+      - name: Run Terraform
+        id: tf
+        working-directory: terraform
         run: |
-          echo "Waiting for EC2 ($EC2_IP) SSH..."
-          for i in {1..30}; do
-            ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@$EC2_IP "echo 'SSH is up'" && break || sleep 10
-          done
+          terraform init
+          terraform apply -auto-approve -var="ssh_public_key=${{ steps.ssh.outputs.pub_key }}"
+          IP=$(terraform output -raw instance_public_ip)
+          echo "server_ip=$IP" >> $GITHUB_OUTPUT
 
+      # Step 7: Ansible Playbook run karo EC2 server par
       - name: Run Ansible Playbook
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
         run: |
-          cd ansible
-          ansible-playbook -i "$EC2_IP," -u ubuntu --private-key ~/.ssh/id_rsa playbook.yml
+          ansible-playbook \
+            -i "${{ steps.tf.outputs.server_ip }}," \
+            -u ubuntu \
+            --private-key ~/.ssh/id_rsa \
+            ansible/playbook.yml
+
+      # Step 8: Website link screen par print karo
+      - name: Show Live URL
+        run: |
+          echo "Website Live: http://${{ steps.tf.outputs.server_ip }}" >> $GITHUB_STEP_SUMMARY
+

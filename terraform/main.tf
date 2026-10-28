@@ -1,46 +1,53 @@
-provider "aws" {
-  region = "ap-south-1" # Mumbai Region
+# 1. Variables
+variable "aws_region" {
+  type    = string
+  default = "us-east-1"
 }
 
-# 1. AWS ka default VPC use karna
-resource "aws_default_vpc" "default" {
-  tags = {
-    Name = "Default VPC"
+variable "instance_type" {
+  type    = string
+  default = "t2.micro" # Free tier eligible
+}
+
+variable "ssh_public_key" {
+  type    = string
+  default = ""
+}
+
+# 2. Latest Ubuntu 22.04 AMI find karna
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"] # Canonical (Ubuntu owner ID)
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
   }
 }
 
-# 2. Security Group (Port 22, 80, 3306)
+# 3. Security Group (Port 22 SSH aur Port 80 HTTP open karna)
 resource "aws_security_group" "web_sg" {
-  name        = "web-server-sg"
-  description = "Allow SSH, HTTP, and MySQL traffic"
-  vpc_id      = aws_default_vpc.default.id
+  name        = "my-project-web-sg"
+  description = "Allow HTTP and SSH"
 
-  # HTTP
   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # SSH
-  ingress {
+    description = "SSH access"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # MySQL
   ingress {
-    from_port   = 3306
-    to_port     = 3306
+    description = "HTTP access for web"
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Outbound traffic (Internet access ke liye)
   egress {
+    description = "Allow all outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -48,14 +55,23 @@ resource "aws_security_group" "web_sg" {
   }
 }
 
-# 3. EC2 Instance Launch
-resource "aws_instance" "web_server" {
-  ami                    = "ami-03f4878e83fed34e0" # Ubuntu 22.04 LTS (ap-south-1)
-  instance_type          = "t2.micro"
-  key_name               = "my-aws-key"           # Apna existing AWS Key Pair name yahan dalein
-  vpc_security_group_ids = [aws_security_group.web_sg.id]
+# 4. SSH Key Pair (Ansible connect hone ke liye)
+resource "aws_key_pair" "deployer" {
+  count      = var.ssh_public_key != "" ? 1 : 0
+  key_name   = "my-project-deployer-key"
+  public_key = var.ssh_public_key
+}
+
+# 5. EC2 Server
+resource "aws_instance" "web" {
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = var.instance_type
+  vpc_security_group_ids      = [aws_security_group.web_sg.id]
+  key_name                    = var.ssh_public_key != "" ? aws_key_pair.deployer[0].key_name : null
+  associate_public_ip_address = true
 
   tags = {
-    Name = "Nginx-MySQL-Server"
+    Name = "my-project-web-server"
   }
 }
+
