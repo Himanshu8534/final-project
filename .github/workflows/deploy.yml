@@ -1,0 +1,50 @@
+name: End-to-End One-Click Deployment
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init & Apply
+        run: |
+          cd terraform
+          terraform init
+          terraform apply -auto-approve
+          SERVER_IP=$(terraform output -raw server_public_ip)
+          echo "EC2_IP=$SERVER_IP" >> $GITHUB_ENV
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Wait for EC2 SSH availability
+        run: |
+          echo "Waiting for EC2 ($EC2_IP) SSH..."
+          for i in {1..30}; do
+            ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@$EC2_IP "echo 'SSH is up'" && break || sleep 10
+          done
+
+      - name: Run Ansible Playbook
+        run: |
+          cd ansible
+          ansible-playbook -i "$EC2_IP," -u ubuntu --private-key ~/.ssh/id_rsa playbook.yml

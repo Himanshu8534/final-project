@@ -1,0 +1,55 @@
+---
+- name: Setup Nginx and MySQL Server
+  hosts: all
+  become: yes
+  vars:
+    db_name: "app_db"
+    db_user: "app_user"
+    db_password: "AppPassword@123"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install Nginx, MySQL Server, and Python dependencies
+      apt:
+        name:
+          - nginx
+          - mysql-server
+          - python3-pymysql
+        state: present
+
+    - name: Start and enable Nginx
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: Start and enable MySQL
+      service:
+        name: mysql
+        state: started
+        enabled: yes
+
+    - name: Create MySQL database
+      mysql_db:
+        name: "{{ db_name }}"
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: Create MySQL user with privileges
+      mysql_user:
+        name: "{{ db_user }}"
+        password: "{{ db_password }}"
+        priv: "{{ db_name }}.*:ALL"
+        host: "localhost"
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: Deploy custom index.html
+      copy:
+        src: index.html
+        dest: /var/www/html/index.html
+        mode: '0644'
