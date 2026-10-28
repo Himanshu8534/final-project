@@ -6,7 +6,7 @@ variable "aws_region" {
 
 variable "instance_type" {
   type    = string
-  default = "t2.micro" # Free tier eligible
+  default = "t3.micro" # Free tier eligible
 }
 
 variable "ssh_public_key" {
