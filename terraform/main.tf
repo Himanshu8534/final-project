@@ -1,4 +1,3 @@
-# 1. Variables
 variable "aws_region" {
   type    = string
   default = "ap-south-1"
@@ -14,7 +13,6 @@ variable "ssh_public_key" {
   default = ""
 }
 
-# 2. Latest Ubuntu 22.04 AMI find karna
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"] # Canonical (Ubuntu owner ID)
@@ -25,7 +23,6 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-# 3. Security Group (Port 22 SSH aur Port 80 HTTP open karna)
 resource "aws_security_group" "web_sg" {
   name        = "my-project-web-sg"
   description = "Allow HTTP and SSH"
@@ -55,14 +52,12 @@ resource "aws_security_group" "web_sg" {
   }
 }
 
-# 4. SSH Key Pair (Ansible connect hone ke liye)
 resource "aws_key_pair" "deployer" {
   count      = var.ssh_public_key != "" ? 1 : 0
   key_name   = "my-project-deployer-key"
   public_key = var.ssh_public_key
 }
 
-# 5. EC2 Server
 resource "aws_instance" "web" {
   ami                         = data.aws_ami.ubuntu.id
   instance_type               = var.instance_type
