@@ -5,7 +5,7 @@ variable "aws_region" {
 
 variable "instance_type" {
   type    = string
-  default = "t3.micro" # Free tier eligible
+  default = "t3.micro"
 }
 
 variable "ssh_public_key" {
@@ -15,7 +15,7 @@ variable "ssh_public_key" {
 
 data "aws_ami" "ubuntu" {
   most_recent = true
-  owners      = ["099720109477"] # Canonical (Ubuntu owner ID)
+  owners      = ["099720109477"]
 
   filter {
     name   = "name"
